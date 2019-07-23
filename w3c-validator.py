@@ -7,12 +7,21 @@ License:   MIT
 Email:     srackham@gmail.com
 '''
 
+'''
+Fork from https://github.com/srackham/w3c-validator
+Modified by pulse-mind
+Email: pulse.mind.com@gmail.com
+
+Example : python w3c-validator.py --cssonly --file_url_or_directory=/mnt/d/projects/example/resources/css
+'''
+
 import os
 import sys
 import time
 import json
 import commands
 import urllib
+import getopt
 
 html_validator_url = 'http://validator.w3.org/check'
 css_validator_url = 'http://jigsaw.w3.org/css-validator/validator'
@@ -63,18 +72,53 @@ def validate(filename):
     return result
 
 
+def usage(argv):
+    message('usage: %s [--verbose] [--cssonly] --file_url_or_directory=FILE|URL|PATH' % os.path.basename(argv))
+    exit(1)
+
 if __name__ == '__main__':
-    if len(sys.argv) >= 2 and sys.argv[1] == '--verbose':
-        verbose_option = True
-        args = sys.argv[2:]
+
+    verbose_option = False
+    css_only_option = False
+    file_or_directory = None
+    try:                                
+        opts, args = getopt.getopt(sys.argv[1:], "hcvf:", ["help", "cssonly", "verbose", "file_url_or_directory="])
+    except getopt.GetoptError:          
+        usage(sys.argv[0])                         
+        sys.exit(2)               
+    for opt, arg in opts:    
+        if opt in ("-h", "--help"): 
+            usage(sys.argv[0])                     
+            sys.exit()   
+        elif opt in ("-v", "--verbose"):
+            verbose_option = True                        
+        elif opt in ("-c", "--cssonly"):
+            css_only_option = True   
+        elif opt in ("-f", "--file_url_or_directory"):
+            file_or_directory = arg     
+
+    if file_or_directory is None : 
+        usage(sys.argv[0])                         
+        sys.exit(2)        
+
+    files = []     
+    if os.path.isdir(file_or_directory):
+        # r=root, d=directories, f = files
+        for r, d, f in os.walk(file_or_directory):
+            for file in f:
+                if css_only_option and file.endswith('.css') or not css_only_option:     
+                        if file.endswith('.css') or file.endswith('.html') or file.endswith('.htm'):
+                            files.append(os.path.join(r, file))                   
+        print("Found these files in %s: " % (file_or_directory))
+        for f in files:
+            print(f)
     else:
-        args = sys.argv[1:]
-    if len(args) == 0:
-        message('usage: %s [--verbose] FILE|URL...' % os.path.basename(sys.argv[0]))
-        exit(1)
+        files.append(file_or_directory)    
+
     errors = 0
     warnings = 0
-    for f in args:
+    
+    for f in files:           
         message('validating: %s ...' % f)
         retrys = 0
         while retrys < 2:
@@ -82,20 +126,24 @@ if __name__ == '__main__':
             if result:
                 break
             retrys += 1
-            message('retrying: %s ...' % f)
+            message('| retrying: %s ...' % f)
         else:
-            message('failed: %s' % f)
+            message('| failed: %s' % f)
             errors += 1
             continue
         if f.endswith('.css'):
             errorcount = result['cssvalidation']['result']['errorcount']
             warningcount = result['cssvalidation']['result']['warningcount']
+            # print(str(result))
             errors += errorcount
             warnings += warningcount
             if errorcount > 0:
-                message('errors: %d' % errorcount)
+                message('| errors: %d' % errorcount)
+                for error in result['cssvalidation']['errors']:
+                    print("|-- Ligne %s : %s" % (error['line'], error['message']))
+                    print("|       %s" % (error['context']))
             if warningcount > 0:
-                message('warnings: %d' % warningcount)
+                message('| warnings: %d' % warningcount)
         else:
             for msg in result['messages']:
                 if 'lastLine' in msg:
@@ -106,5 +154,3 @@ if __name__ == '__main__':
                     errors += 1
                 else:
                     warnings += 1
-    if errors:
-        exit(1)
